@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 source .env
@@ -5,12 +6,24 @@ source .env
 command_exists() {
     command -v "$1" &> /dev/null
 }
+
+# Verificar se estamos no Alpine
+if [ -f /etc/alpine-release ]; then
+    IS_ALPINE=true
+else
+    IS_ALPINE=false
+fi
+
 if [ -z "$WORK_DIR" ]; then
     echo "Error: WORK_DIR environment variable is not set. Please set it in your .env file."
     exit 1
 fi
 
+# Adaptação para Alpine/BusyBox
 if [[ "$OSTYPE" == "darwin"* ]]; then
+    dir_size_bytes=$(du -s -b "$WORK_DIR" 2>/dev/null | awk '{print $1}')
+elif [ "$IS_ALPINE" = true ]; then
+    # BusyBox du não suporta --bytes, usa -b
     dir_size_bytes=$(du -s -b "$WORK_DIR" 2>/dev/null | awk '{print $1}')
 else
     dir_size_bytes=$(du -s --bytes "$WORK_DIR" 2>/dev/null | awk '{print $1}')
@@ -21,7 +34,7 @@ max_size_bytes=$((2 * 1024 * 1024 * 1024 * 10))
 echo "Mounting $WORK_DIR ($dir_size_bytes bytes) to docker."
 
 if [ "$dir_size_bytes" -gt "$max_size_bytes" ]; then
-    echo "Error: WORK_DIR ($WORK_DIR) contains more than 20GB of data ($(du -sh "$WORK_DIR" 2>/dev/null | awk '{print $1}'))."
+    echo "Error: WORK_DIR ($WORK_DIR) contains more than 20GB of data."
     exit 1
 fi
 
@@ -33,8 +46,12 @@ fi
 
 if ! command_exists docker; then
     echo "Error: Docker is not installed. Please install Docker first."
-    echo "On Ubuntu: sudo apt install docker.io"
-    echo "On macOS/Windows: Install Docker Desktop from https://www.docker.com/get-started/"
+    if [ "$IS_ALPINE" = true ]; then
+        echo "On Alpine: apk add docker"
+    else
+        echo "On Ubuntu: sudo apt install docker.io"
+        echo "On macOS/Windows: Install Docker Desktop from https://www.docker.com/get-started/"
+    fi
     exit 1
 fi
 
